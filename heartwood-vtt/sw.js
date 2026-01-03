@@ -1,4 +1,4 @@
-const CACHE = "heartwood-vtt-v1";
+const CACHE = "heartwood-vtt-v2";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./sw.js"];
 
 self.addEventListener("install", (event) => {
