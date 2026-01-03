@@ -282,6 +282,39 @@
   </div>
 
 <script>
+  // -------- IndexedDB for big assets --------
+const DB_NAME = "heartwood-assets";
+const DB_STORE = "files";
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(DB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveAsset(key, blob){
+  const db = await openDB();
+  return new Promise(res => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(blob, key);
+    tx.oncomplete = () => res();
+  });
+}
+
+async function loadAsset(key){
+  const db = await openDB();
+  return new Promise(res => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).get(key);
+    req.onsuccess = () => res(req.result);
+  });
+}
+
 (() => {
   // ---------------------------
   // State + persistence
@@ -325,6 +358,7 @@
   const hudTurn = document.getElementById("hudTurn");
 
   const img = new Image();
+  let mapObjectUrl = null;
   img.onload = () => {
     state.map.w = img.naturalWidth || state.map.w;
     state.map.h = img.naturalHeight || state.map.h;
@@ -332,7 +366,14 @@
     draw();
     save();
   };
-  if(state.map.src) img.src = state.map.src;
+if(state.map.src === "indexeddb://map-image"){
+  loadAsset("map-image").then(blob => {
+    if(!blob) return;
+    if(mapObjectUrl) URL.revokeObjectURL(mapObjectUrl);
+    mapObjectUrl = URL.createObjectURL(blob);
+    img.src = mapObjectUrl;
+  });
+}
 
   function resize(){
     const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -630,14 +671,22 @@
   // UI wiring
   // ---------------------------
   const mapFile = document.getElementById("mapFile");
-  mapFile.addEventListener("change", async () => {
-    const f = mapFile.files?.[0];
-    if(!f) return;
-    const dataUrl = await fileToDataURL(f);
-    state.map.src = dataUrl;
-    img.src = dataUrl;
-    save();
-  });
+ mapFile.addEventListener("change", async () => {
+  const f = mapFile.files?.[0];
+  if(!f) return;
+
+  await saveAsset("map-image", f);
+
+  state.map.src = "indexeddb://map-image";
+  save();
+
+  const blob = await loadAsset("map-image");
+if(!blob) return;
+if(mapObjectUrl) URL.revokeObjectURL(mapObjectUrl);
+mapObjectUrl = URL.createObjectURL(blob);
+img.src = mapObjectUrl;
+});
+
 
   const gridSize = document.getElementById("gridSize");
   gridSize.value = state.grid.size;
